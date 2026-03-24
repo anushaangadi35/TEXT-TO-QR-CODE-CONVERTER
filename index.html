@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Code Generator — RAMESH</title>
+  <style>
+    :root {
+      --accent1: #667eea;
+      --accent2: #764ba2;
+      --muted: #666;
+      --card: #fff;
+    }
+    *{box-sizing:border-box}
+    body{
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      background: linear-gradient(135deg, #f0f4ff 0%, #f7f1ff 100%);
+      min-height:100vh; 
+      display:flex; 
+      flex-direction:column;
+      align-items:center; 
+      justify-content:center; 
+      padding:24px;
+    }
+    .card{
+      width:100%; max-width:920px; background:var(--card); border-radius:14px; padding:22px;
+      box-shadow:0 10px 30px rgba(30,30,60,0.08);
+      display:grid; grid-template-columns: 1fr 340px; gap:20px;
+    }
+    h1{font-size:22px; margin-bottom:6px; background:linear-gradient(135deg,var(--accent1),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent;}
+    p.lead{color:var(--muted); margin-bottom:16px}
+    label{display:block; font-weight:600; margin-top:12px; margin-bottom:6px; color:#333}
+    input[type="text"], select {
+      width:100%; padding:10px 12px; border-radius:8px; border:1px solid #e6e6ee;
+      font-size:14px;
+    }
+    .controls { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+    button{
+      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      color:white; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:700;
+    }
+    button.ghost{ background:transparent; border:1px solid #ddd; color:#333; font-weight:600 }
+    .right {
+      display:flex; flex-direction:column; align-items:center; padding:18px;
+      border-left:1px dashed #f0f0f5;
+    }
+    .qr-wrap{ background:#fff; padding:12px; border-radius:12px; box-shadow:0 6px 18px rgba(80,80,120,0.04); }
+    canvas{ display:block; width:260px; height:260px; }
+    .meta { margin-top:12px; text-align:center; color:var(--muted); font-weight:600 }
+    .small { font-size:13px; color:var(--muted); margin-top:6px }
+    footer {
+      margin-top:24px;
+      font-size:14px;
+      color:#555;
+      text-align:center;
+      font-weight:600;
+    }
+    footer span {
+      background:linear-gradient(135deg,var(--accent1),var(--accent2));
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+    @media (max-width:860px){
+      .card{ grid-template-columns:1fr; } 
+      .right{ border-left:none; border-top:1px dashed #f0f0f5; padding-top:18px; } 
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+</head>
+<body>
+  <div class="card">
+    <div>
+      <h1>QR Code Generator</h1>
+      <p class="lead">Enter a name and phone number, choose the format, and generate a QR instantly.</p>
+
+      <label for="fullName">Full name</label>
+      <input id="fullName" type="text" placeholder="e.g. John Doe" />
+
+      <label for="phone">Phone number</label>
+      <input id="phone" type="text" placeholder="e.g. +91 98765 43210" />
+
+      <label for="format">Format</label>
+      <select id="format">
+        <option value="plain">Plain text (Name + Number)</option>
+        <option value="vcard">vCard (importable contact)</option>
+      </select>
+
+      <label for="size">QR size (px)</label>
+      <select id="size">
+        <option value="260">260 × 260</option>
+        <option value="400">400 × 400</option>
+        <option value="600">600 × 600</option>
+      </select>
+
+      <div class="controls">
+        <button id="generateBtn">Generate QR</button>
+        <button id="downloadBtn" class="ghost">Download PNG</button>
+        <button id="copyBtn" class="ghost">Copy Text</button>
+        <button id="clearBtn" class="ghost">Clear</button>
+      </div>
+
+      <div id="notice" class="small"></div>
+    </div>
+
+    <div class="right">
+      <div class="qr-wrap" id="previewWrap">
+        <canvas id="qrCanvas" width="260" height="260"></canvas>
+      </div>
+
+      <div class="meta">
+        <div id="previewLabel">Preview</div>
+        <div id="encodedText" class="small"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2025 <span>RAMESH</span>. All rights reserved.
+  </footer>
+
+  <script>
+    const fullNameEl = document.getElementById('fullName');
+    const phoneEl = document.getElementById('phone');
+    const formatEl = document.getElementById('format');
+    const sizeEl = document.getElementById('size');
+    const generateBtn = document.getElementById('generateBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const notice = document.getElementById('notice');
+    const encodedTextEl = document.getElementById('encodedText');
+    const qrCanvas = document.getElementById('qrCanvas');
+
+    let qr = new QRious({
+      element: qrCanvas,
+      size: parseInt(sizeEl.value, 10),
+      value: ''
+    });
+
+    function buildVCard(name, phone) {
+      const parts = name.trim().split(' ');
+      const family = parts.length > 1 ? parts.slice(-1).join(' ') : '';
+      const given = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] || '';
+      return [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        `N:${family};${given};;;`,
+        `FN:${name}`,
+        `TEL;TYPE=CELL:${phone}`,
+        'END:VCARD'
+      ].join('\n');
+    }
+
+    function buildPayload() {
+      const name = fullNameEl.value.trim();
+      const phone = phoneEl.value.trim();
+      if (!name && !phone) return { ok: false, text: '', message: 'Enter name and/or phone number.' };
+
+      if (formatEl.value === 'vcard') {
+        return { ok: true, text: buildVCard(name || 'Unknown', phone || ''), message: '' };
+      } else {
+        let t = '';
+        if (name) t += `Name: ${name}`;
+        if (phone) t += (t ? '\n' : '') + `Phone: ${phone}`;
+        return { ok: true, text: t, message: '' };
+      }
+    }
+
+    function generateQR() {
+      const payload = buildPayload();
+      if (!payload.ok) {
+        notice.textContent = payload.message;
+        notice.style.color = 'crimson';
+        return;
+      }
+      notice.textContent = '';
+      const newSize = parseInt(sizeEl.value, 10) || 260;
+      qr.size = newSize;
+      qr.value = payload.text;
+      encodedTextEl.textContent = payload.text;
+    }
+
+    function downloadQR() {
+      if (!qr.value) {
+        notice.textContent = 'Generate a QR first.';
+        notice.style.color = 'crimson';
+        return;
+      }
+      const dataURL = qrCanvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      const namePart = (fullNameEl.value.trim() || 'qr').replace(/[^a-z0-9-_]/gi, '_').slice(0,40);
+      a.download = `${namePart}_${Date.now()}.png`;
+      a.href = dataURL;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    async function copyText() {
+      if (!qr.value) {
+        notice.textContent = 'Generate a QR first.';
+        notice.style.color = 'crimson';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(qr.value);
+        notice.textContent = 'Encoded text copied!';
+        notice.style.color = 'green';
+        setTimeout(()=> notice.textContent = '', 1800);
+      } catch (e) {
+        notice.textContent = 'Copy failed.';
+        notice.style.color = 'crimson';
+      }
+    }
+
+    function clearAll() {
+      fullNameEl.value = '';
+      phoneEl.value = '';
+      formatEl.value = 'plain';
+      sizeEl.value = '260';
+      qr.value = '';
+      encodedTextEl.textContent = '';
+      const ctx = qrCanvas.getContext('2d');
+      ctx.clearRect(0,0,qrCanvas.width, qrCanvas.height);
+      notice.textContent = '';
+    }
+
+    generateBtn.addEventListener('click', generateQR);
+    downloadBtn.addEventListener('click', downloadQR);
+    copyBtn.addEventListener('click', copyText);
+    clearBtn.addEventListener('click', clearAll);
+
+    (function init() {
+      qr.value = 'Scan to generate contact';
+      encodedTextEl.textContent = qr.value;
+    })();
+  </script>
+</body>
+</html>
